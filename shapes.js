@@ -77,7 +77,9 @@ function fromCanvas(n, draw, opts) {
     const y = -(py - h / 2) * sc + (opts.cy || 0);
     const z = opts.depth ? opts.depth(x, y) : rand(-0.04, 0.04);
     const col = [data[o] / 255, data[o + 1] / 255, data[o + 2] / 255];
-    out.push(pt(x, y, z, col, opts.key ? opts.key(x, y, col) : Math.random(), opts.vary ?? 0.25));
+    const q = pt(x, y, z, col, opts.key ? opts.key(x, y, col) : Math.random(), opts.vary ?? 0.25);
+    if (opts.size) q.s = opts.size;
+    out.push(q);
   }
   return out;
 }
@@ -96,13 +98,14 @@ function compose(N, layers) {
   all.sort((a, b) => a.k - b.k);
   // 정확히 N개로 맞춤 (순서 유지)
   const M = all.length;
-  const pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
+  const pos = new Float32Array(N * 3), col = new Float32Array(N * 3), size = new Float32Array(N);
   for (let j = 0; j < N; j++) {
     const p = all[Math.min(M - 1, Math.floor((j * M) / N))];
+    size[j] = p.s ?? 1;
     pos[j * 3] = p.x; pos[j * 3 + 1] = p.y; pos[j * 3 + 2] = p.z;
     col[j * 3] = p.r; col[j * 3 + 1] = p.g; col[j * 3 + 2] = p.b;
   }
-  return { pos, col };
+  return { pos, col, size };
 }
 
 const sweepKey = (x, y) => (Math.atan2(x, y) + Math.PI) / TAU; // 12시 방향부터 한 바퀴
@@ -399,22 +402,29 @@ function sleigh(N, message) {
     ctx.beginPath(); ctx.moveTo(110, 460); ctx.lineTo(120, 490); ctx.moveTo(330, 460); ctx.lineTo(320, 490);
     ctx.moveTo(60, 490); ctx.lineTo(420, 490); ctx.quadraticCurveTo(470, 490, 465, 455); ctx.stroke();
   };
+  // 글자는 외곽선을 같이 그려 획을 두껍게 → 입자가 촘촘히 모여 잘 읽힘
   const titleDraw = (ctx) => {
-    ctx.fillStyle = '#ffcf4a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = '700 124px "Great Vibes", "Snell Roundhand", cursive';
-    ctx.fillText(message.title, W / 2, 110);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    let fs = 150;
+    do { ctx.font = `400 ${fs}px "Great Vibes", "Snell Roundhand", cursive`; fs -= 4; }
+    while (ctx.measureText(message.title).width > W * 0.94 && fs > 40);
+    ctx.strokeStyle = '#ffd65a'; ctx.lineWidth = 5; ctx.strokeText(message.title, W / 2, 100);
+    ctx.fillStyle = '#ffe07a'; ctx.fillText(message.title, W / 2, 100);
   };
   const subDraw = (ctx) => {
-    ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = '400 50px "Gowun Dodum", "Apple SD Gothic Neo", sans-serif';
-    ctx.fillText(message.subtitle, W / 2, 580);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    let fs = 72;
+    do { ctx.font = `400 ${fs}px "Jua", "Apple SD Gothic Neo", sans-serif`; fs -= 2; }
+    while (ctx.measureText(message.subtitle).width > W * 0.92 && fs > 20);
+        ctx.fillStyle = '#f4f8ff'; ctx.fillText(message.subtitle, W / 2, 585);
   };
   const opts = { w: W, h: H, worldW, depth: () => rand(-0.05, 0.05) };
+  const textOpts = { ...opts, depth: () => rand(-0.01, 0.01), size: 0.7 }; // 글자는 작은 입자로 촘촘하게
   const layers = [
-    { w: 60, make: (n) => fromCanvas(n, sceneDraw, { ...opts, key: (x) => 1 - (x + 1.8) / 3.6 }) },
-    { w: 24, order: 1, make: (n) => fromCanvas(n, titleDraw, { ...opts, key: (x) => (x + 1.8) / 3.6, vary: 0.15 }) },
+    { w: 42, make: (n) => fromCanvas(n, sceneDraw, { ...opts, key: (x) => 1 - (x + 1.8) / 3.6 }) },
+    { w: 36, order: 1, make: (n) => fromCanvas(n, titleDraw, { ...textOpts, key: (x) => (x + 1.8) / 3.6, vary: 0.06 }) },
   ];
-  if (message.subtitle) layers.push({ w: 13, order: 2, make: (n) => fromCanvas(n, subDraw, { ...opts, key: (x) => (x + 1.8) / 3.6, vary: 0.1 }) });
+  if (message.subtitle) layers.push({ w: 28, order: 2, make: (n) => fromCanvas(n, subDraw, { ...textOpts, size: 0.6, key: (x) => (x + 1.8) / 3.6, vary: 0.04 }) });
   return {
     ...compose(N, layers),
     rot: (t) => ({ yaw: Math.sin(t * 0.4) * 0.08, pitch: 0, bob: Math.sin(t * 1.6) * 0.03 }),

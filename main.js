@@ -6,6 +6,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { CONFIG } from './config.js';
 import { buildShapes } from './shapes.js';
 import { startHands, countFingers } from './gesture.js';
+import { Music } from './music.js';
 
 const N = CONFIG.particles;
 const T = CONFIG.timing;
@@ -62,7 +63,7 @@ function resize() {
   renderer.setSize(w, h); composer.setSize(w, h);
   camera.aspect = w / h;
   // 세로 화면에서도 장면이 잘리지 않게 거리 조절
-  const needW = wide ? 4.0 : 2.8, needH = 3.0;
+  const needW = wide ? 4.0 : 2.9, needH = 3.4;
   const tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
   camera.position.set(0, 0, Math.max(needH / 2 / tanH, needW / 2 / tanH / camera.aspect));
   camera.updateProjectionMatrix();
@@ -72,13 +73,14 @@ addEventListener('resize', resize);
 
 // ── 입자 상태 ─────────────────────────────────────────────
 const from = new Float32Array(N * 3), fromCol = new Float32Array(N * 3);
+const baseSize = new Float32Array(N), fromSize = new Float32Array(N);
 const jit = new Float32Array(N * 3), phase = new Float32Array(N), delay = new Float32Array(N);
 for (let i = 0; i < N; i++) {
   const u = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2, s = Math.sqrt(1 - u * u);
   const r = Math.cbrt(Math.random());
   jit[i * 3] = s * Math.cos(a) * r; jit[i * 3 + 1] = u * r; jit[i * 3 + 2] = s * Math.sin(a) * r;
   phase[i] = Math.random() * 6.28; delay[i] = Math.random();
-  size[i] = 0.011 + Math.random() * 0.009;
+  baseSize[i] = size[i] = 0.011 + Math.random() * 0.009;
   col.set(TRAIL, i * 3);
 }
 
@@ -86,16 +88,19 @@ let shapes = null;
 let current = null;     // 현재 장면 이름 (null = 혜성)
 let S = 0;              // 장면 시작 시각
 let orbitMix = 0;
+// 손 위치 따라가기 (월드 좌표 오프셋)
+const follow = { tx: 0, ty: 0, x: 0, y: 0 };
 
 const clock = new THREE.Clock();
 
 function setShape(name) {
   if (name === current) return;
   if (name && !shapes?.[name]) return;
-  from.set(pos); fromCol.set(col);
+  from.set(pos); fromCol.set(col); fromSize.set(size);
   current = name; S = clock.elapsedTime;
   wide = !!(name && shapes[name].wide); resize();
   ui.scene(name);
+  guide.onShape(name);
 }
 
 // 혜성 머리 궤적
@@ -119,6 +124,10 @@ function update() {
   const t = clock.elapsedTime;
   const shp = current ? shapes[current] : null;
   orbitMix += ((shp ? 1 : 0) - orbitMix) * Math.min(1, dt * 2.2);
+  const fk = 1 - Math.pow(1 - CONFIG.follow.smooth, dt * 60);
+  follow.x += (follow.tx - follow.x) * fk; follow.y += (follow.ty - follow.y) * fk;
+  const fw = shp && shp.wide ? 0.35 : 1; // 마지막 장면은 글자가 잘리지 않게 조금만
+  const fx = follow.x * fw, fy = follow.y * fw;
   const since = t - S;
 
   let rot = null, cy = 0, cx = 0, cz = 0, sc = 1;
@@ -129,8 +138,11 @@ function update() {
     cp = Math.cos(rot.pitch || 0); sp = Math.sin(rot.pitch || 0);
     cr = Math.cos(rot.roll || 0); sr = Math.sin(rot.roll || 0);
     [cx, cy, cz] = shp.center; cy += rot.bob || 0; sc = shp.scale;
+    cx += fx; cy += fy;
+    // 손이 움직이는 방향으로 살짝 고개를 돌림
+    cyaw = Math.cos(rot.yaw + fx * 0.35); syaw = Math.sin(rot.yaw + fx * 0.35);
   }
-  const center = shp ? shp.center : [0, 0, 0];
+  const center = shp ? [shp.center[0] + fx, shp.center[1] + fy, shp.center[2]] : [0, 0, 0];
 
   for (let i = 0; i < N; i++) {
     const i3 = i * 3;
@@ -139,6 +151,7 @@ function update() {
     const k = rank * KMAX;
     const tt = t - k;
     headIdle(tt, hA);
+    hA[0] += fx * 0.6; hA[1] += fy * 0.6;
     if (orbitMix > 0.001) headOrbit(tt, center, hB);
     const m = orbitMix;
     const w = 0.012 + 0.055 * Math.pow(1 - rank, 1.3);
@@ -155,6 +168,7 @@ function update() {
     let r = fromCol[i3] + (TRAIL[0] - fromCol[i3]) * g;
     let gg = fromCol[i3 + 1] + (TRAIL[1] - fromCol[i3 + 1]) * g;
     let b = fromCol[i3 + 2] + (TRAIL[2] - fromCol[i3 + 2]) * g;
+    let sz = fromSize[i] + (baseSize[i] - fromSize[i]) * g;
 
     // ③ 꼬리 → 새 모양 (그리는 순서대로)
     if (shp) {
@@ -170,11 +184,14 @@ function update() {
         const wx = x3 + cx, wy = y2 + cy, wz = z3 + cz;
         px += (wx - px) * q; py += (wy - py) * q; pz += (wz - pz) * q;
         r += (shp.col[i3] - r) * q; gg += (shp.col[i3 + 1] - gg) * q; b += (shp.col[i3 + 2] - b) * q;
+        sz += (baseSize[i] * shp.size[i] - sz) * q;
       }
     }
     pos[i3] = px; pos[i3 + 1] = py; pos[i3 + 2] = pz;
     col[i3] = r; col[i3 + 1] = gg; col[i3 + 2] = b;
+    size[i] = sz;
   }
+  geo.attributes.size.needsUpdate = true;
   geo.attributes.position.needsUpdate = true;
   geo.attributes.color.needsUpdate = true;
 }
@@ -218,7 +235,67 @@ addEventListener('keydown', (e) => {
   else if (e.key === 'c') document.body.classList.toggle('hide-cam');
   else if (e.key === 'f') (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen());
   else if (e.key === 'h') document.body.classList.toggle('hide-ui');
+  else if (e.key === 'm') setMusic(!music.on);
+  else if (e.key === 'g') guide.start();
 });
+
+// ── 가이드 (순서대로 안내) ─────────────────────────────────
+const guide = (() => {
+  const G = CONFIG.guide;
+  const box = $('#guide'), textEl = $('#guide-text'), dots = $('#guide-dots');
+  let step = -1, waiting = false, timer;
+  const steps = G.steps.filter((s) => CONFIG.gestures[s.n]);
+  dots.innerHTML = steps.map(() => '<i></i>').join('');
+
+  function show(text, cls = '') {
+    textEl.classList.remove('in');
+    clearTimeout(show.t);
+    show.t = setTimeout(() => { textEl.textContent = text; textEl.className = `in ${cls}`; }, 220);
+  }
+  function paint() {
+    [...dots.children].forEach((d, i) => { d.className = i < step ? 'done' : i === step ? 'now' : ''; });
+  }
+  function go(i) {
+    step = i; waiting = false; paint();
+    if (step >= steps.length) {
+      show(G.finish, 'finish');
+      timer = setTimeout(() => box.classList.remove('on'), 6000);
+      return;
+    }
+    show(steps[step].text);
+  }
+  return {
+    start() {
+      if (!G.enabled || !steps.length) return;
+      clearTimeout(timer);
+      box.classList.add('on');
+      go(0);
+    },
+    onShape(name) {
+      // 마지막 장면(글자)과 겹치지 않게 그동안은 숨김
+      box.classList.toggle('away', !!(name && shapes[name].wide));
+      if (step < 0 || step >= steps.length || waiting) return;
+      const want = CONFIG.gestures[steps[step].n];
+      if (name !== want) return;
+      waiting = true;
+      const s = steps[step];
+      if (s.done) show(s.done, 'yay');
+      // 모양이 다 그려질 즈음 다음 안내
+      const wait = (T.gather + T.build + T.fly) * 1000 + 900;
+      timer = setTimeout(() => go(step + 1), wait);
+    },
+  };
+})();
+
+// ── 음악 ─────────────────────────────────────────────────
+const music = new Music(CONFIG.music);
+const musicBtn = $('#music');
+function setMusic(on) {
+  if (on) music.start(); else music.stop();
+  musicBtn.classList.toggle('off', !music.on);
+  musicBtn.setAttribute('aria-label', music.on ? '음악 끄기' : '음악 켜기');
+}
+musicBtn.addEventListener('click', () => setMusic(!music.on));
 
 // ── 손동작 → 장면 ─────────────────────────────────────────
 const camCanvas = $('#cam-overlay');
@@ -231,11 +308,21 @@ function onHand(lm) {
   cctx.clearRect(0, 0, camCanvas.width, camCanvas.height);
   if (!lm) {
     ui.fingers(null);
+    if (now - lastSeen > 600) { follow.tx = 0; follow.ty = 0; }
     if (current && now - lastSeen > CONFIG.lostMs) setShape(null);
     cand = null;
     return;
   }
   lastSeen = now;
+  if (CONFIG.follow.enabled) {
+    // 손바닥 중심 (손목 + 손가락 뿌리 평균). 카메라는 거울처럼 좌우 반전
+    const ids = [0, 5, 9, 13, 17];
+    const hx = ids.reduce((a, i) => a + lm[i].x, 0) / ids.length;
+    const hy = ids.reduce((a, i) => a + lm[i].y, 0) / ids.length;
+    const k = CONFIG.follow.strength;
+    follow.tx = Math.max(-1.1, Math.min(1.1, (0.5 - hx) * 2.6 * k));
+    follow.ty = Math.max(-0.6, Math.min(0.6, (0.55 - hy) * 1.6 * k));
+  }
   // 미리보기 위에 손 뼈대
   cctx.strokeStyle = 'rgba(255,255,255,.8)'; cctx.lineWidth = 2;
   for (const [a, b] of LINKS) {
@@ -270,22 +357,21 @@ async function boot() {
   try {
     await Promise.all([
       document.fonts.load('124px "Great Vibes"', CONFIG.message.title),
-      document.fonts.load('50px "Gowun Dodum"', CONFIG.message.subtitle || 'a'),
+      document.fonts.load('72px "Jua"', CONFIG.message.subtitle || 'a'),
     ]);
   } catch {}
   shapes = buildShapes(N, CONFIG.message);
-  window.__xmas = { setShape, shapes }; // 디버그용
+  window.__xmas = { setShape, shapes, follow }; // 디버그용
 
-  $('#start').addEventListener('click', () => {
+  const begin = () => {
     $('#intro').classList.add('gone');
-    startCamera();
+    document.body.classList.add('started');
+    if (CONFIG.music.enabled) setMusic(true);
+    setTimeout(() => guide.start(), 900);
     wake();
-  });
-  $('#nocam').addEventListener('click', () => {
-    $('#intro').classList.add('gone');
-    ui.cam('키보드 모드 · 숫자키 0~5');
-    wake();
-  });
+  };
+  $('#start').addEventListener('click', () => { begin(); startCamera(); });
+  $('#nocam').addEventListener('click', () => { begin(); ui.cam('키보드 모드 · 숫자키 0~5'); });
   $('#intro').classList.add('ready');
 }
 boot();
