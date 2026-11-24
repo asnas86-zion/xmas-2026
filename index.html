@@ -6,7 +6,7 @@
 <title>PD팀 연말 메시지</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Gowun+Dodum&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Gowun+Dodum&family=Jua&display=swap" rel="stylesheet">
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -44,13 +44,46 @@
   #camwrap video, #camwrap canvas { position: absolute; inset: 0; width: 100%; height: 100%;
     object-fit: cover; transform: scaleX(-1); }
 
+  #intro b { color: var(--fg); font-weight: 400; }
+  #intro .steps { list-style: none; display: flex; gap: 8px; justify-content: center; padding: 0; margin: -8px 0 28px; flex-wrap: wrap; }
+  #intro .steps li { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 22px;
+    width: 54px; padding: 8px 0 6px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); }
+  #intro .steps li span { font-size: 11px; color: var(--dim); }
+
+  /* 순서 안내 가이드 */
+  #guide { position: fixed; bottom: 5vh; left: 50%; transform: translateX(-50%); z-index: 6; text-align: center;
+    opacity: 0; transition: opacity .6s; pointer-events: none; width: calc(100vw - 32px); }
+  #guide.on { opacity: 1; }
+  #guide.on.away { opacity: 0; }
+  #guide-text { display: inline-block; font-size: clamp(18px, 2.4vw, 26px); padding: 12px 26px; border-radius: 999px;
+    background: rgba(12,13,18,.55); border: 1px solid rgba(255,255,255,.14); backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px); text-shadow: 0 1px 8px rgba(0,0,0,.6);
+    opacity: 0; transform: translateY(-6px); transition: opacity .35s, transform .35s; }
+  #guide-text.in { opacity: 1; transform: none; }
+  #guide-text.yay { color: var(--gold); border-color: rgba(255,207,74,.45); }
+  #guide-text.finish { color: var(--fg); }
+  #guide-dots { display: flex; gap: 8px; justify-content: center; margin-bottom: 12px; }
+  #guide { display: flex; flex-direction: column-reverse; align-items: center; }
+  #guide-dots i { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.18); transition: all .3s; }
+  #guide-dots i.done { background: var(--gold); }
+  #guide-dots i.now { background: #fff; box-shadow: 0 0 10px rgba(255,255,255,.8); transform: scale(1.25); }
+
+  /* 음악 버튼 */
+  #music { position: fixed; top: 16px; right: 16px; z-index: 7; width: 40px; height: 40px; border-radius: 50%;
+    display: grid; place-items: center; cursor: pointer; color: var(--fg); background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.14); opacity: 0; transition: opacity .4s; }
+  body.started #music { opacity: .75; }
+  #music:hover { opacity: 1; }
+  #music.off { color: var(--dim); }
+  #music.off::after { content: ''; position: absolute; width: 22px; height: 2px; background: currentColor; transform: rotate(-45deg); }
+
   /* 상태 + 안내 (마우스를 움직이면 잠깐 보임) */
-  #status { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px;
+  #status { position: fixed; bottom: 16px; right: 16px; display: flex; gap: 8px;
     font-size: 13px; z-index: 5; transition: opacity .5s; opacity: 0; white-space: nowrap; }
   #status span { padding: 6px 12px; border-radius: 999px; background: rgba(255,255,255,.07);
     border: 1px solid rgba(255,255,255,.1); color: var(--dim); }
   #status #status-scene { color: var(--fg); }
-  #hint { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px;
+  #hint { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px;
     z-index: 5; transition: opacity .5s; opacity: 0; flex-wrap: wrap; justify-content: center;
     max-width: calc(100vw - 32px); }
   #hint button { font: inherit; font-size: 13px; color: var(--fg); cursor: pointer; display: flex; gap: 6px;
@@ -59,7 +92,7 @@
   #hint button span { color: var(--dim); font-size: 11px; }
   body.show-ui #status, body.show-ui #hint { opacity: 1; }
   body.hide-ui #status, body.hide-ui #hint { opacity: 0 !important; }
-  @media (max-width: 640px) { #camwrap { width: 110px; bottom: 96px; } }
+  @media (max-width: 640px) { #camwrap { width: 110px; } #status { display: none; } #hint { top: 64px; } }
 </style>
 </head>
 <body>
@@ -70,10 +103,17 @@
   <div id="status"><span id="status-scene">혜성</span><span id="status-fingers">손 없음</span><span id="status-cam">대기 중</span></div>
   <div id="hint"></div>
 
+  <div id="guide" aria-live="polite"><div id="guide-text"></div><div id="guide-dots"></div></div>
+
+  <button id="music" class="off" aria-label="음악 켜기" title="음악 (M)">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+  </button>
+
   <div id="intro">
     <div>
       <h1>Merry Christmas</h1>
-      <p>카메라에 손을 보여주세요.<br>손가락 개수에 따라 빛이 모양을 바꿔요.</p>
+      <p>카메라에 손을 보여 주세요.<br>손가락을 <b>하나씩</b> 펼 때마다 빛이 새로운 모양으로 바뀌어요.<br>마지막엔 손가락을 <b>모두 접어</b> 주세요. 순서대로 안내해 드릴게요 🎄</p>
+      <ol class="steps"><li>☝️<span>1</span></li><li>✌️<span>2</span></li><li>🤟<span>3</span></li><li>🖖<span>4</span></li><li>🖐<span>5</span></li><li>✊<span>주먹</span></li></ol>
       <div class="btns">
         <button id="start" class="primary">카메라로 시작</button>
         <button id="nocam">카메라 없이 보기</button>
