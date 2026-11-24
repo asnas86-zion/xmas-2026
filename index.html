@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PD팀 연말 메시지</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Gowun+Dodum&display=swap" rel="stylesheet">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<style>
+  :root { --fg: #f4f1ea; --dim: rgba(244,241,234,.6); --gold: #ffcf4a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0c0d12; color: var(--fg); overflow: hidden;
+    font-family: "Gowun Dodum", "Apple SD Gothic Neo", system-ui, sans-serif; }
+  #stage, #stage canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* 시작 화면 */
+  #intro { position: fixed; inset: 0; display: grid; place-items: center; text-align: center;
+    background: radial-gradient(ellipse at 50% 40%, rgba(20,21,28,.35), rgba(8,9,12,.85));
+    transition: opacity .8s ease; z-index: 10; padding: 16px; }
+  #intro.gone { opacity: 0; pointer-events: none; }
+  #intro h1 { font-family: "Great Vibes", cursive; font-weight: 400; color: var(--gold);
+    font-size: clamp(48px, 9vw, 96px); margin: 0 0 4px; text-shadow: 0 0 24px rgba(255,207,74,.35); }
+  #intro p { color: var(--dim); margin: 0 0 28px; line-height: 1.6; }
+  #intro .btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;
+    opacity: 0; transition: opacity .4s; }
+  #intro.ready .btns { opacity: 1; }
+  #intro button { font: inherit; font-size: 16px; padding: 12px 22px; border-radius: 999px; cursor: pointer;
+    border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.06); color: var(--fg); }
+  #intro button.primary { background: var(--gold); color: #1a1408; border-color: var(--gold); }
+
+  /* 카메라 미리보기 */
+  #camwrap { position: fixed; left: 16px; bottom: 16px; width: 168px; aspect-ratio: 4/3;
+    border-radius: 12px; overflow: hidden; opacity: 0; transition: opacity .4s; z-index: 5;
+    box-shadow: 0 6px 24px rgba(0,0,0,.5); border: 1px solid rgba(255,255,255,.12); }
+  body.cam-on #camwrap { opacity: .55; }
+  body.cam-on.hide-cam #camwrap { opacity: 0; }
+  #camwrap video, #camwrap canvas { position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; transform: scaleX(-1); }
+
+  /* 상태 + 안내 (마우스를 움직이면 잠깐 보임) */
+  #status { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px;
+    font-size: 13px; z-index: 5; transition: opacity .5s; opacity: 0; white-space: nowrap; }
+  #status span { padding: 6px 12px; border-radius: 999px; background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.1); color: var(--dim); }
+  #status #status-scene { color: var(--fg); }
+  #hint { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px;
+    z-index: 5; transition: opacity .5s; opacity: 0; flex-wrap: wrap; justify-content: center;
+    max-width: calc(100vw - 32px); }
+  #hint button { font: inherit; font-size: 13px; color: var(--fg); cursor: pointer; display: flex; gap: 6px;
+    align-items: center; padding: 7px 12px; border-radius: 999px; background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.1); }
+  #hint button span { color: var(--dim); font-size: 11px; }
+  body.show-ui #status, body.show-ui #hint { opacity: 1; }
+  body.hide-ui #status, body.hide-ui #hint { opacity: 0 !important; }
+  @media (max-width: 640px) { #camwrap { width: 110px; bottom: 96px; } }
+</style>
+</head>
+<body>
+  <div id="stage"></div>
+
+  <div id="camwrap"><video id="cam" playsinline muted></video><canvas id="cam-overlay" width="320" height="240"></canvas></div>
+
+  <div id="status"><span id="status-scene">혜성</span><span id="status-fingers">손 없음</span><span id="status-cam">대기 중</span></div>
+  <div id="hint"></div>
+
+  <div id="intro">
+    <div>
+      <h1>Merry Christmas</h1>
+      <p>카메라에 손을 보여주세요.<br>손가락 개수에 따라 빛이 모양을 바꿔요.</p>
+      <div class="btns">
+        <button id="start" class="primary">카메라로 시작</button>
+        <button id="nocam">카메라 없이 보기</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
